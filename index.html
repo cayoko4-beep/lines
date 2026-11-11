@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Игра 2D Линии (Color Lines)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Анимация пульсации для выбранного шара */
+        @keyframes pulse-selected {
+            0%, 100% { transform: scale(0.92); opacity: 1; }
+            50% { transform: scale(1.08); opacity: 0.85; }
+        }
+        .ball-selected {
+            animation: pulse-selected 1s infinite ease-in-out;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+        }
+
+        /* Анимация появления шариков */
+        @keyframes pop-in {
+            0% { transform: scale(0); opacity: 0; }
+            70% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .ball-appear {
+            animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* 3D эффект для шариков через Radial Gradient */
+        .ball {
+            border-radius: 50%;
+            transition: transform 0.15s ease, opacity 0.2s ease;
+        }
+
+        /* Цветовые стили шаров */
+        .color-red {
+            background: radial-gradient(circle at 35% 35%, #ff8888, #dc2626 50%, #7f1d1d 90%);
+            box-shadow: inset -2px -2px 6px rgba(0,0,0,0.4), 0 4px 8px rgba(220, 38, 38, 0.3);
+        }
+        .color-blue {
+            background: radial-gradient(circle at 35% 35%, #93c5fd, #2563eb 50%, #1e3a8a 90%);
+            box-shadow: inset -2px -2px 6px rgba(0,0,0,0.4), 0 4px 8px rgba(37, 99, 235, 0.3);
+        }
+        .color-green {
+            background: radial-gradient(circle at 35% 35%, #86efac, #16a34a 50%, #14532d 90%);
+            box-shadow: inset -2px -2px 6px rgba(0,0,0,0.4), 0 4px 8px rgba(22, 163, 74, 0.3);
+        }
+        .color-yellow {
+            background: radial-gradient(circle at 35% 35%, #fef08a, #ca8a04 50%, #713f12 90%);
+            box-shadow: inset -2px -2px 6px rgba(0,0,0,0.4), 0 4px 8px rgba(202, 138, 4, 0.3);
+        }
+        .color-purple {
+            background: radial-gradient(circle at 35% 35%, #f0abfc, #9333ea 50%, #581c87 90%);
+            box-shadow: inset -2px -2px 6px rgba(0,0,0,0.4), 0 4px 8px rgba(147, 51, 234, 0.3);
+        }
+        .color-cyan {
+            background: radial-gradient(circle at 35% 35%, #a5f3fc, #0891b2 50%, #164e63 90%);
+            box-shadow: inset -2px -2px 6px rgba(0,0,0,0.4), 0 4px 8px rgba(8, 145, 178, 0.3);
+        }
+        .color-orange {
+            background: radial-gradient(circle at 35% 35%, #ffedd5, #ea580c 50%, #7c2d12 90%);
+            box-shadow: inset -2px -2px 6px rgba(0,0,0,0.4), 0 4px 8px rgba(234, 88, 12, 0.3);
+        }
+
+        /* Сетка игрового поля */
+        .board-grid {
+            display: grid;
+            grid-template-columns: repeat(9, minmax(0, 1fr));
+            grid-template-rows: repeat(9, minmax(0, 1fr));
+            gap: 4px;
+        }
+
+        /* Стиль клетки */
+        .cell {
+            aspect-ratio: 1 / 1;
+            background: rgba(30, 41, 59, 0.7);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+        .cell:hover {
+            background: rgba(51, 65, 85, 0.9);
+        }
+        .cell-highlight {
+            background: rgba(71, 85, 105, 1) !important;
+            box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.2);
+        }
+
+        /* Превью будущего шара */
+        .preview-ball {
+            width: 35%;
+            height: 35%;
+            opacity: 0.5;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-between p-4">
+
+    <!-- Верхняя панель управления и счет -->
+    <header class="w-full max-w-md flex flex-col items-center gap-4 mb-2">
+        <div class="flex items-center justify-between w-full">
+            <h1 class="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-2">
+                <i class="fa-solid fa-shapes text-indigo-400"></i> Цветные Линии
+            </h1>
+            <button id="btn-restart" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold rounded-xl shadow-lg transition flex items-center gap-2 text-sm">
+                <i class="fa-solid fa-rotate-right"></i> Заново
+            </button>
+        </div>
+
+        <!-- Карточки со статистикой -->
+        <div class="grid grid-cols-3 gap-3 w-full">
+            <!-- Счет -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col items-center shadow-md">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Счёт</span>
+                <span id="score-val" class="text-2xl font-bold text-amber-400">0</span>
+            </div>
+            <!-- Рекорд -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col items-center shadow-md">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Рекорд</span>
+                <span id="best-score-val" class="text-2xl font-bold text-emerald-400">0</span>
+            </div>
+            <!-- Следующие шары -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col items-center shadow-md">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">След.</span>
+                <div id="next-balls-container" class="flex items-center justify-center gap-1.5 h-7">
+                    <!-- Заполняется из JS -->
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Главное игровое поле -->
+    <main class="w-full max-w-md aspect-square bg-slate-900/90 border border-slate-800 p-2 sm:p-3 rounded-2xl shadow-2xl relative flex items-center justify-center">
+        <div id="board" class="board-grid w-full h-full">
+            <!-- Клетки генерируются JS -->
+        </div>
+
+        <!-- Оверлей Game Over -->
+        <div id="game-over-modal" class="hidden absolute inset-0 bg-slate-950/90 rounded-2xl flex flex-col items-center justify-center p-6 text-center backdrop-blur-sm z-20 transition-all">
+            <div class="w-16 h-16 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center text-3xl mb-4 border border-red-500/30">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h2 class="text-3xl font-extrabold text-white mb-1">Игра Окончена!</h2>
+            <p class="text-slate-400 text-sm mb-4">На поле больше нет свободного места.</p>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 w-full max-w-xs mb-6">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-slate-400">Итоговый счёт:</span>
+                    <span id="final-score" class="text-xl font-bold text-amber-400">0</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-400">Лучший результат:</span>
+                    <span id="final-best-score" class="text-xl font-bold text-emerald-400">0</span>
+                </div>
+            </div>
+            <button id="btn-modal-restart" class="w-full max-w-xs py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-95 text-white font-bold rounded-xl shadow-lg transition">
+                Сиграть Ещё Раз
+            </button>
+        </div>
+    </main>
+
+    <!-- Инструкция/Правила -->
+    <footer class="w-full max-w-md text-center text-xs text-slate-500 mt-4">
+        Соберите <b>5 или более</b> шаров одного цвета в линию (по горизонтали, вертикали или диагонали), чтобы они исчезли!
+    </footer>
+
+    <!-- Скрипт игры -->
+    <script>
+        // Константы игры
+        const BOARD_SIZE = 9;
+        const MIN_LINE_LENGTH = 5;
+        const COLORS = [
+            'color-red',
+            'color-blue',
+            'color-green',
+            'color-yellow',
+            'color-purple',
+            'color-cyan',
+            'color-orange'
+        ];
+
+        // Состояние игры
+        let board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+        let score = 0;
+        let bestScore = parseInt(localStorage.getItem('lines_best_score') || '0', 10);
+        let selectedCell = null; // {r, c}
+        let nextColors = [];
+        let isAnimating = false;
+
+        // Элементы DOM
+        const boardEl = document.getElementById('board');
+        const scoreValEl = document.getElementById('score-val');
+        const bestScoreValEl = document.getElementById('best-score-val');
+        const nextBallsContainer = document.getElementById('next-balls-container');
+        const btnRestart = document.getElementById('btn-restart');
+        const gameOverModal = document.getElementById('game-over-modal');
+        const finalScoreEl = document.getElementById('final-score');
+        const finalBestScoreEl = document.getElementById('final-best-score');
+        const btnModalRestart = document.getElementById('btn-modal-restart');
+
+        // Инициализация
+        function initGame() {
+            bestScoreValEl.textContent = bestScore;
+            createBoardDOM();
+            resetState();
+        }
+
+        // Создание элементов сетки в DOM
+        function createBoardDOM() {
+            boardEl.innerHTML = '';
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.addEventListener('click', () => handleCellClick(r, c));
+                    boardEl.appendChild(cell);
+                }
+            }
+        }
+
+        // Сброс и старт новой игры
+        function resetState() {
+            board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+            score = 0;
+            selectedCell = null;
+            isAnimating = false;
+            updateScore(0);
+            gameOverModal.classList.add('hidden');
+
+            // Очищаем DOM клетки
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    updateCellDOM(r, c);
+                }
+            }
+
+            // Генерируем 3 случайных шара для следующего хода
+            generateNextColors();
+            
+            // Размещаем 3 первоначальных шара
+            spawnBalls(3);
+
+            // Генерируем новые цвета для показа следующего хода
+            generateNextColors();
+        }
+
+        // Получение случайного цвета
+        function getRandomColor() {
+            return COLORS[Math.floor(Math.random() * COLORS.length)];
+        }
+
+        // Подготовка случайных цветов для следующего хода
+        function generateNextColors() {
+            nextColors = [getRandomColor(), getRandomColor(), getRandomColor()];
+            renderNextColors();
+        }
+
+        // Отображение следующей тройки шаров
+        function renderNextColors() {
+            nextBallsContainer.innerHTML = '';
+            nextColors.forEach(colorClass => {
+                const preview = document.createElement('div');
+                preview.className = `w-5 h-5 rounded-full ball ${colorClass} shadow-sm`;
+                nextBallsContainer.appendChild(preview);
+            });
+        }
+
+        // Поиск пустых клеток
+        function getEmptyCells() {
+            const empty = [];
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (!board[r][c]) {
+                        empty.push({ r, c });
+                    }
+                }
+            }
+            return empty;
+        }
+
+        // Появление шаров на поле
+        function spawnBalls(count) {
+            const emptyCells = getEmptyCells();
+            if (emptyCells.length === 0) return;
+
+            const spawnCount = Math.min(count, emptyCells.length);
+            const spawnedCoords = [];
+
+            for (let i = 0; i < spawnCount; i++) {
+                const randIdx = Math.floor(Math.random() * emptyCells.length);
+                const { r, c } = emptyCells.splice(randIdx, 1)[0];
+                const color = nextColors[i] || getRandomColor();
+
+                board[r][c] = color;
+                updateCellDOM(r, c, true);
+                spawnedCoords.push({ r, c });
+            }
+
+            // Проверяем собранные линии после появления шаров
+            let linesCleared = false;
+            spawnedCoords.forEach(coord => {
+                if (board[coord.r][coord.c]) { // Проверка, что шар еще не удален соседней линией
+                    if (checkAndClearLines(coord.r, coord.c)) {
+                        linesCleared = true;
+                    }
+                }
+            });
+
+            // Если свободного места не осталось и линии не очистились - Game Over
+            if (getEmptyCells().length === 0 && !linesCleared) {
+                triggerGameOver();
+            }
+        }
+
+        // Обновление DOM одной клетки
+        function updateCellDOM(r, c, isNew = false) {
+            const cell = boardEl.children[r * BOARD_SIZE + c];
+            cell.innerHTML = '';
+            cell.classList.remove('cell-highlight');
+
+            const color = board[r][c];
+            if (color) {
+                const ball = document.createElement('div');
+                ball.className = `ball w-4/5 h-4/5 ${color}`;
+                if (isNew) {
+                    ball.classList.add('ball-appear');
+                }
+                if (selectedCell && selectedCell.r === r && selectedCell.c === c) {
+                    ball.classList.add('ball-selected');
+                }
+                cell.appendChild(ball);
+            }
+        }
+
+        // Обработка клика по клетке
+        function handleCellClick(r, c) {
+            if (isAnimating) return;
+
+            // Если нажат шар того же цвета
+            if (board[r][c]) {
+                // Если кликнули по уже выбранному - снимаем выбор
+                if (selectedCell && selectedCell.r === r && selectedCell.c === c) {
+                    selectedCell = null;
+                    updateCellDOM(r, c);
+                    return;
+                }
+                // Меняем выбор на другой шар
+                const prevSelected = selectedCell;
+                selectedCell = { r, c };
+                if (prevSelected) updateCellDOM(prevSelected.r, prevSelected.c);
+                updateCellDOM(r, c);
+                return;
+            }
+
+            // Если пустая клетка и шар был выбран -> пробуем переместить
+            if (selectedCell && !board[r][c]) {
+                const path = findPath(selectedCell.r, selectedCell.c, r, c);
+                if (path) {
+                    moveBall(selectedCell, { r, c }, path);
+                } else {
+                    // Анимация невозможного хода (небольшая встряска)
+                    const cell = boardEl.children[r * BOARD_SIZE + c];
+                    cell.classList.add('bg-red-500/20');
+                    setTimeout(() => cell.classList.remove('bg-red-500/20'), 300);
+                }
+            }
+        }
+
+        // Поиск пути (Волновой алгоритм / BFS)
+        function findPath(startR, startC, targetR, targetC) {
+            const queue = [[startR, startC]];
+            const visited = Array(BOARD_SIZE).fill(false).map(() => Array(BOARD_SIZE).fill(false));
+            const parent = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+
+            visited[startR][startC] = true;
+
+            const dirs = [
+                [-1, 0], [1, 0], [0, -1], [0, 1]
+            ];
+
+            while (queue.length > 0) {
+                const [r, c] = queue.shift();
+
+                if (r === targetR && c === targetC) {
+                    // Восстанавливаем путь
+                    const path = [];
+                    let curr = { r: targetR, c: targetC };
+                    while (curr) {
+                        path.push(curr);
+                        curr = parent[curr.r][curr.c];
+                    }
+                    return path.reverse();
+                }
+
+                for (const [dr, dc] of dirs) {
+                    const nr = r + dr;
+                    const nc = c + dc;
+
+                    if (
+                        nr >= 0 && nr < BOARD_SIZE &&
+                        nc >= 0 && nc < BOARD_SIZE &&
+                        !visited[nr][nc] &&
+                        (!board[nr][nc] || (nr === targetR && nc === targetC))
+                    ) {
+                        visited[nr][nc] = true;
+                        parent[nr][nc] = { r, c };
+                        queue.push([nr, nc]);
+                    }
+                }
+            }
+
+            return null; // Путь не найден
+        }
+
+        // Анимация перемещения шара по пути
+        function moveBall(from, to, path) {
+            isAnimating = true;
+            const ballColor = board[from.r][from.c];
+            board[from.r][from.c] = null;
+            updateCellDOM(from.r, from.c);
+            selectedCell = null;
+
+            let step = 0;
+            const interval = setInterval(() => {
+                if (step > 0) {
+                    const prev = path[step - 1];
+                    board[prev.r][prev.c] = null;
+                    updateCellDOM(prev.r, prev.c);
+                }
+
+                const curr = path[step];
+                board[curr.r][curr.c] = ballColor;
+                updateCellDOM(curr.r, curr.c);
+
+                step++;
+                if (step >= path.length) {
+                    clearInterval(interval);
+                    isAnimating = false;
+                    
+                    // После ходов проверяем уничтожение линий
+                    const cleared = checkAndClearLines(to.r, to.c);
+                    if (!cleared) {
+                        // Если ничего не уничтожилось — добавляются новые шары
+                        spawnBalls(3);
+                        generateNextColors();
+                    }
+                }
+            }, 40);
+        }
+
+        // Проверка и удаление собранных линий (5+ в ряд)
+        function checkAndClearLines(startR, startC) {
+            const color = board[startR][startC];
+            if (!color) return false;
+
+            const directions = [
+                [[0, 1], [0, -1]],   // Горизонталь
+                [[1, 0], [-1, 0]],   // Вертикаль
+                [[1, 1], [-1, -1]],  // Диагональ \
+                [[1, -1], [-1, 1]]   // Диагональ /
+            ];
+
+            const toRemove = new Set();
+            toRemove.add(`${startR},${startC}`);
+
+            directions.forEach(dirPair => {
+                const lineCoords = [{ r: startR, c: startC }];
+
+                dirPair.forEach(([dr, dc]) => {
+                    let r = startR + dr;
+                    let c = startC + dc;
+
+                    while (
+                        r >= 0 && r < BOARD_SIZE &&
+                        c >= 0 && c < BOARD_SIZE &&
+                        board[r][c] === color
+                    ) {
+                        lineCoords.push({ r, c });
+                        r += dr;
+                        c += dc;
+                    }
+                });
+
+                if (lineCoords.length >= MIN_LINE_LENGTH) {
+                    lineCoords.forEach(coord => toRemove.add(`${coord.r},${coord.c}`));
+                }
+            });
+
+            // Если линия длиннее или равна 5 шарам
+            if (toRemove.size >= MIN_LINE_LENGTH) {
+                // Начисление очков: 5 шаров = 10 очков, каждый последующий дает +4
+                const removedCount = toRemove.size;
+                const pointsGained = 10 + (removedCount - 5) * 4;
+                updateScore(score + pointsGained);
+
+                // Удаляем шары с анимацией
+                toRemove.forEach(key => {
+                    const [r, c] = key.split(',').map(Number);
+                    const cell = boardEl.children[r * BOARD_SIZE + c];
+                    const ball = cell.querySelector('.ball');
+                    if (ball) {
+                        ball.style.transform = 'scale(0)';
+                        ball.style.opacity = '0';
+                    }
+                    setTimeout(() => {
+                        board[r][c] = null;
+                        updateCellDOM(r, c);
+                    }, 150);
+                });
+
+                return true;
+            }
+
+            return false;
+        }
+
+        // Обновление счета
+        function updateScore(newScore) {
+            score = newScore;
+            scoreValEl.textContent = score;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestScoreValEl.textContent = bestScore;
+                localStorage.setItem('lines_best_score', bestScore.toString());
+            }
+        }
+
+        // Завершение игры
+        function triggerGameOver() {
+            finalScoreEl.textContent = score;
+            finalBestScoreEl.textContent = bestScore;
+            gameOverModal.classList.remove('hidden');
+        }
+
+        // Слушатели событий
+        btnRestart.addEventListener('click', resetState);
+        btnModalRestart.addEventListener('click', resetState);
+
+        // Старт игры при загрузке
+        window.onload = initGame;
+    </script>
+</body>
+</html>
